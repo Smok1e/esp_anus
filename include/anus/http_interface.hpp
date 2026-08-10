@@ -4,7 +4,7 @@
 
 #include <anus/property/property.hpp>
 
-#include <string_view>
+#include <functional>
 #include <map>
 
 #include <cJSON.h>
@@ -31,7 +31,11 @@ public:
 	template<typename T>
 	T* operator+=(T* property);
 	
+	void onUpdateProgress(std::function<void(float)> callback);
+	
 private:
+	std::function<void(float)> m_update_progress_callback;
+	
 	httpd_handle_t m_httpd_handle = 0;
 	
 	cJSON* m_properties_json = nullptr;
@@ -42,6 +46,7 @@ private:
 	
 	void propertiesHandler(httpd_req_t* request);
 	void propertyHandler(httpd_req_t* request);
+	void firmwareHandler(httpd_req_t* request);
 	
 };
 

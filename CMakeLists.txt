@@ -18,3 +18,5 @@ idf_component_register(
 		"esp_wifi"
 		"nvs_flash"
 )
+
+target_compile_options(${COMPONENT_LIB} PRIVATE -Wno-parentheses)

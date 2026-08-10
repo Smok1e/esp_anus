@@ -3,6 +3,8 @@
 #include <cstring>
 
 #include <esp_log.h>
+#include <esp_partition.h>
+#include <esp_ota_ops.h>
 
 //========================================
 
@@ -35,10 +37,136 @@ void HttpInterface::init()
 	ESP_ERROR_CHECK(httpd_start(&m_httpd_handle, &config));
 	ESP_LOGI(TAG, "webserver started on port %d", CONFIG_ANUS_API_HTTP_PORT);
 	
+	registerUri<&HttpInterface::firmwareHandler,   HTTP_POST>("/firmware"  );
 	registerUri<&HttpInterface::propertiesHandler, HTTP_GET >("/properties");
 	registerUri<&HttpInterface::propertyHandler,   HTTP_GET >("/property/*");
 	registerUri<&HttpInterface::propertyHandler,   HTTP_POST>("/property/*");
 }
+
+//========================================
+
+void HttpInterface::onUpdateProgress(std::function<void(float)> callback)
+{
+	m_update_progress_callback = callback;
+}
+
+#ifdef CONFIG_ANUS_API_OTA_ENABLED
+
+void HttpInterface::firmwareHandler(httpd_req_t* request)
+{
+	char buffer[1024] = "";
+
+	size_t firmware_size = request->content_len;
+	ESP_LOGI(TAG, "firmware size: %zu bytes", firmware_size);
+	
+	const esp_partition_t* running_partition = esp_ota_get_running_partition();
+	ESP_LOGI(TAG, "running partition is %s", running_partition->label);
+	
+	const esp_partition_t* update_partition = esp_ota_get_next_update_partition(running_partition);
+	if (!update_partition)
+	{
+		ESP_LOGE(TAG, "no valid OTA partition found");
+		SendError(request, HTTPD_500, "no valid OTA partition found");
+		return;
+	}
+	
+	ESP_LOGI(TAG, "firmware update will be written to partition %s", update_partition->label);
+	
+	auto update_start_ticks = xTaskGetTickCount();
+	
+	esp_ota_handle_t ota_handle = 0;
+	esp_err_t err = 0;
+	if ((err = esp_ota_begin(update_partition, 0, &ota_handle)) != ESP_OK)
+	{
+		ESP_LOGE(TAG, "esp_ota_begin failed: %s", esp_err_to_name(err));
+		
+		SendError(request, HTTPD_500, "internal error");
+		return;
+	}
+	
+	ESP_LOGI(TAG, "performing firmware update...");
+	
+	uint8_t last_progress = 0;
+	size_t written = 0;
+	int len = 0;
+	
+	while (len = httpd_req_recv(request, buffer, sizeof(buffer)))
+	{
+		if ((err = esp_ota_write(ota_handle, buffer, len)) != ESP_OK)
+		{
+			ESP_LOGE(TAG, "esp_ota_write failed: %s", esp_err_to_name(err));
+			esp_ota_abort(ota_handle);
+			
+			SendError(request, HTTPD_500, "internal error");
+			return;
+		}
+		
+		written += len;
+		auto progress = static_cast<float>(written) / firmware_size;
+		
+		if (m_update_progress_callback)
+			m_update_progress_callback(progress);
+			
+		if (progress != last_progress)
+		{
+			printf("update progress: %d%%...        \r", static_cast<int>(100.f * progress));
+			last_progress = progress;
+		}
+		
+		vTaskDelay(pdMS_TO_TICKS(10));
+	}
+	
+	printf("\n");
+	
+	if ((err = esp_ota_end(ota_handle)) != ESP_OK)
+	{
+		ESP_LOGE(TAG, "esp_ota_end failed: %s", esp_err_to_name(err));
+		
+		SendError(request, HTTPD_500, "internal error");
+		return;
+	}
+	
+	if ((err = esp_ota_set_boot_partition(update_partition)) != ESP_OK)
+	{
+		ESP_LOGE(TAG, "esp_ota_set_boot_partition failed: %s", esp_err_to_name(err));
+		
+		SendError(request, HTTPD_500, "internal error");
+		return;
+	}
+	
+	auto elapsed = static_cast<float>(pdTICKS_TO_MS(xTaskGetTickCount() - update_start_ticks)) / 1000;
+	
+	ESP_LOGI(TAG, "firmware update done successfully in %.2f s", elapsed);
+	
+	auto* object = cJSON_CreateObject();
+	cJSON_AddNumberToObject(object, "elapsed_time", elapsed);
+	SendJson(request, object);
+	cJSON_Delete(object);
+	
+	xTaskCreate(
+		[](void* ctx) -> void {
+			vTaskDelay(10);
+			httpd_stop(reinterpret_cast<HttpInterface*>(ctx)->m_httpd_handle);
+			
+			ESP_LOGI(TAG, "restarting...");
+			esp_restart();
+		},
+		"Suicide",
+		4096,
+		this,
+		5,
+		nullptr
+	);
+}
+
+#else // CONFIG_ANUS_API_OTA_ENABLED
+
+void HttpInterface::firmwareHandler(httpd_req_t* request)
+{
+	SendError(request, "400", "OTA disabled");
+}
+
+#endif // CONFIG_ANUS_API_OTA_ENABLED
 
 //========================================
 

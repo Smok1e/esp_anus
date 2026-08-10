@@ -118,7 +118,7 @@ void WiFi::onWiFiEvent(uint32_t id, void* data)
 	switch (id)
 	{
 		case WIFI_EVENT_STA_START:
-			ESP_ERROR_CHECK(esp_wifi_connect());
+			esp_wifi_connect();
 			ESP_LOGI(TAG, "connecting to " CONFIG_ANUS_WIFI_SSID "...");
 			
 			break;
@@ -127,7 +127,7 @@ void WiFi::onWiFiEvent(uint32_t id, void* data)
 		{
 			auto* event = reinterpret_cast<wifi_event_sta_disconnected_t*>(data);
 			
-			ESP_ERROR_CHECK(esp_wifi_connect());
+			esp_wifi_connect();
 			ESP_LOGI(TAG, "wifi disconnected (0x%02X); reconnecting...", event->reason);
 			
 			break;
