@@ -60,6 +60,10 @@ menu "Application Network Unification Service (ANUS)"
             string "Device name"
             default "anus"
 
+        config ANUS_API_ALLOW_CORS
+            bool "Allow CORS"
+            default y
+
     endmenu
 
     menu "Debugging"

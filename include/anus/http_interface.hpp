@@ -61,6 +61,12 @@ void HttpInterface::registerUri(const char* uri)
 	config.user_ctx = this;
 	config.handler = [](httpd_req_t* request) -> esp_err_t {
 		httpd_resp_set_type(request, "application/json");
+
+#ifdef CONFIG_ANUS_API_ALLOW_CORS
+		httpd_resp_set_hdr(request, "Access-Control-Allos-Origin", "*");
+		httpd_resp_set_hdr(request, "Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+		httpd_resp_set_hdr(request, "Access-Control-Allow-Headers", "Auth, Content-Type, Authentication");
+#endif
 		
 		(reinterpret_cast<HttpInterface*>(request->user_ctx)->*Handler)(request);
 		return ESP_OK;
