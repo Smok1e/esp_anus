@@ -1,0 +1,89 @@
+#pragma once
+
+// ANUS - Application Network Unification Service
+
+#include <anus/property/property.hpp>
+
+#include <string_view>
+#include <map>
+
+#include <cJSON.h>
+
+#include <esp_http_server.h>
+
+//========================================
+
+namespace anus
+{
+
+//========================================
+
+class HttpInterface
+{
+public:
+	HttpInterface() = default;
+	
+	void init();
+	
+	template<typename T>
+	T* addProperty(T* property);
+	
+	template<typename T>
+	T* operator+=(T* property);
+	
+private:
+	httpd_handle_t m_httpd_handle = 0;
+	
+	cJSON* m_properties_json = nullptr;
+	std::map<std::string_view, property::Property*> m_properties {};
+	
+	template<auto Handler, httpd_method_t Method = HTTP_GET>
+	void registerUri(const char* uri);
+	
+	void propertiesHandler(httpd_req_t* request);
+	void propertyHandler(httpd_req_t* request);
+	
+};
+
+//========================================
+
+template<auto Handler, httpd_method_t Method /*= HTTP_GET*/>
+void HttpInterface::registerUri(const char* uri)
+{
+	httpd_uri_t config = {};
+	config.uri = uri;
+	config.method = Method;
+	config.user_ctx = this;
+	config.handler = [](httpd_req_t* request) -> esp_err_t {
+		httpd_resp_set_type(request, "application/json");
+		
+		(reinterpret_cast<HttpInterface*>(request->user_ctx)->*Handler)(request);
+		return ESP_OK;
+	};
+	
+	ESP_ERROR_CHECK(httpd_register_uri_handler(m_httpd_handle, &config));
+}
+
+template<typename T>
+T* HttpInterface::addProperty(T* property)
+{
+	m_properties[property->getName()] = property;
+	
+	auto* object = cJSON_CreateObject();
+	property->info(object);
+	
+	cJSON_AddItemToArray(m_properties_json, object);
+	return property;
+}
+
+template<typename T>
+T* HttpInterface::operator+=(T* property)
+{
+	return addProperty(property);
+}
+
+//========================================
+
+} // namespace anus
+
+//========================================

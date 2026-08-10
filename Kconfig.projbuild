@@ -1,0 +1,72 @@
+menu "Application Network Unification Service (ANUS)"
+    menu "WiFi"
+        choice ANUS_WIFI_SECURITY
+            prompt "Wifi security protocol"
+
+            config ANUS_WIFI_SECURITY_WPA2
+                bool "WPA2"
+
+            config ANUS_WIFI_SECURITY_WPA3
+                bool "WPA3"
+
+        endchoice
+
+        config ANUS_WIFI_SSID
+            string "WiFi SSID"
+            default ""
+            help
+                WiFi network name
+
+        config ANUS_WIFI_PASSWORD
+            string "WiFi Password"
+            default ""
+            help
+                WiFi network password
+
+        config ANUS_WIFI_OVERRIDE_HOSTNAME
+            bool "Override hostname (HTTP interface/Device name will be used by default)"
+            default n
+
+        config ANUS_WIFI_HOSTNAME
+            string "Hostname"
+            default "anus"
+            depends on ANUS_WIFI_OVERRIDE_HOSTNAME
+            help
+                Set device hostname that will appear in router's DHCP list
+
+    endmenu
+
+    menu "Discovery server"
+        config ANUS_DISCOVERY_PORT
+            int "Discovery server port"
+            default 228
+
+        config ANUS_DISCOVERY_GROUP
+            string "Discovery server multicast group"
+            default "239.14.88.228"
+
+    endmenu
+
+    menu "HTTP interface"
+        config ANUS_API_HTTP_PORT
+            int "HTTP port"
+            default 80
+
+        config ANUS_API_OTA_ENABLED
+            bool "Allow OTA"
+            default y
+
+        config ANUS_API_DEVICE_NAME
+            string "Device name"
+            default "anus"
+
+    endmenu
+
+    menu "Debugging"
+        config ANUS_NET_CHECK_ENABLED
+            bool "Enable socket api error checks"
+            default y
+
+    endmenu
+
+endmenu
