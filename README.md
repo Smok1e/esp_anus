@@ -1,1 +1,1 @@
-# ANUS --- Application Network Unification Service
+# ANUS - Application Network Unification Service
