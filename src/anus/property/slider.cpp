@@ -11,11 +11,12 @@ namespace anus::property
 
 Slider::Slider(
 	const char* name,
+	const char* description,
 	float value /*= 0.f*/,
 	float min /*= 0.f*/,
 	float max /*= 1.f*/
 ):
-	Property(name),
+	Property(name, description),
 	m_value(value),
 	m_min(min),
 	m_max(max)

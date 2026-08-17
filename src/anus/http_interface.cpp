@@ -10,6 +10,16 @@
 
 static const char* TAG = "ANUS/webserver";
 
+#ifdef CONFIG_ANUS_API_OTA_ENABLED
+
+constexpr auto OTA_ENABLED = true;
+
+#else
+
+constexpr auto OTA_ENABLED = false;
+
+#endif // CONFIG_ANUS_API_OTA_ENABLED
+
 //========================================
 
 const char* ExtractPropertyName(const char* uri);
@@ -26,7 +36,10 @@ namespace anus
 
 void HttpInterface::init()
 {
-	m_properties_json = cJSON_CreateArray();
+	m_info_json = cJSON_CreateObject();
+	cJSON_AddStringToObject(m_info_json, "name", CONFIG_ANUS_API_DEVICE_NAME);
+	cJSON_AddBoolToObject(m_info_json, "ota", OTA_ENABLED);
+	m_properties_json = cJSON_AddArrayToObject(m_info_json, "properties");
 	
 	httpd_config_t config = HTTPD_DEFAULT_CONFIG();
 	config.server_port = CONFIG_ANUS_API_HTTP_PORT;
@@ -37,10 +50,10 @@ void HttpInterface::init()
 	ESP_ERROR_CHECK(httpd_start(&m_httpd_handle, &config));
 	ESP_LOGI(TAG, "webserver started on port %d", CONFIG_ANUS_API_HTTP_PORT);
 	
-	registerUri<&HttpInterface::firmwareHandler,   HTTP_POST>("/firmware"  );
-	registerUri<&HttpInterface::propertiesHandler, HTTP_GET >("/properties");
-	registerUri<&HttpInterface::propertyHandler,   HTTP_GET >("/property/*");
-	registerUri<&HttpInterface::propertyHandler,   HTTP_POST>("/property/*");
+	registerUri<&HttpInterface::firmwareHandler, HTTP_POST>("/firmware"  );
+	registerUri<&HttpInterface::infoHandler,     HTTP_GET >("/info"      );
+	registerUri<&HttpInterface::propertyHandler, HTTP_GET >("/property/*");
+	registerUri<&HttpInterface::propertyHandler, HTTP_POST>("/property/*");
 }
 
 //========================================
@@ -50,129 +63,126 @@ void HttpInterface::onUpdateProgress(std::function<void(float)> callback)
 	m_update_progress_callback = callback;
 }
 
-#ifdef CONFIG_ANUS_API_OTA_ENABLED
-
 void HttpInterface::firmwareHandler(httpd_req_t* request)
 {
-	char buffer[1024] = "";
-
-	size_t firmware_size = request->content_len;
-	ESP_LOGI(TAG, "firmware size: %zu bytes", firmware_size);
-	
-	const esp_partition_t* running_partition = esp_ota_get_running_partition();
-	ESP_LOGI(TAG, "running partition is %s", running_partition->label);
-	
-	const esp_partition_t* update_partition = esp_ota_get_next_update_partition(running_partition);
-	if (!update_partition)
+	if constexpr (OTA_ENABLED)
 	{
-		ESP_LOGE(TAG, "no valid OTA partition found");
-		SendError(request, HTTPD_500, "no valid OTA partition found");
-		return;
-	}
+		char buffer[1024] = "";
 	
-	ESP_LOGI(TAG, "firmware update will be written to partition %s", update_partition->label);
-	
-	auto update_start_ticks = xTaskGetTickCount();
-	
-	esp_ota_handle_t ota_handle = 0;
-	esp_err_t err = 0;
-	if ((err = esp_ota_begin(update_partition, 0, &ota_handle)) != ESP_OK)
-	{
-		ESP_LOGE(TAG, "esp_ota_begin failed: %s", esp_err_to_name(err));
+		size_t firmware_size = request->content_len;
+		ESP_LOGI(TAG, "firmware size: %zu bytes", firmware_size);
 		
-		SendError(request, HTTPD_500, "internal error");
-		return;
-	}
-	
-	ESP_LOGI(TAG, "performing firmware update...");
-	
-	uint8_t last_progress = 0;
-	size_t written = 0;
-	int len = 0;
-	
-	while (len = httpd_req_recv(request, buffer, sizeof(buffer)))
-	{
-		if ((err = esp_ota_write(ota_handle, buffer, len)) != ESP_OK)
+		const esp_partition_t* running_partition = esp_ota_get_running_partition();
+		ESP_LOGI(TAG, "running partition is %s", running_partition->label);
+		
+		const esp_partition_t* update_partition = esp_ota_get_next_update_partition(running_partition);
+		if (!update_partition)
 		{
-			ESP_LOGE(TAG, "esp_ota_write failed: %s", esp_err_to_name(err));
-			esp_ota_abort(ota_handle);
+			ESP_LOGE(TAG, "no valid OTA partition found");
+			SendError(request, HTTPD_500, "no valid OTA partition found");
+			return;
+		}
+		
+		ESP_LOGI(TAG, "firmware update will be written to partition %s", update_partition->label);
+		
+		auto update_start_ticks = xTaskGetTickCount();
+		
+		esp_ota_handle_t ota_handle = 0;
+		esp_err_t err = 0;
+		if ((err = esp_ota_begin(update_partition, 0, &ota_handle)) != ESP_OK)
+		{
+			ESP_LOGE(TAG, "esp_ota_begin failed: %s", esp_err_to_name(err));
 			
 			SendError(request, HTTPD_500, "internal error");
 			return;
 		}
 		
-		written += len;
-		auto progress = static_cast<float>(written) / firmware_size;
+		ESP_LOGI(TAG, "performing firmware update...");
 		
-		if (m_update_progress_callback)
-			m_update_progress_callback(progress);
-			
-		if (progress != last_progress)
+		uint8_t last_progress = 0;
+		size_t written = 0;
+		int len = 0;
+		
+		while (len = httpd_req_recv(request, buffer, sizeof(buffer)))
 		{
-			printf("update progress: %d%%...        \r", static_cast<int>(100.f * progress));
-			last_progress = progress;
+			if ((err = esp_ota_write(ota_handle, buffer, len)) != ESP_OK)
+			{
+				ESP_LOGE(TAG, "esp_ota_write failed: %s", esp_err_to_name(err));
+				esp_ota_abort(ota_handle);
+				
+				SendError(request, HTTPD_500, "internal error");
+				return;
+			}
+			
+			written += len;
+			auto progress = static_cast<float>(written) / firmware_size;
+			
+			if (m_update_progress_callback)
+				m_update_progress_callback(progress);
+				
+			if (progress != last_progress)
+			{
+				printf("update progress: %d%%...        \r", static_cast<int>(100.f * progress));
+				last_progress = progress;
+			}
+			
+			vTaskDelay(pdMS_TO_TICKS(10));
 		}
 		
-		vTaskDelay(pdMS_TO_TICKS(10));
-	}
-	
-	printf("\n");
-	
-	if ((err = esp_ota_end(ota_handle)) != ESP_OK)
-	{
-		ESP_LOGE(TAG, "esp_ota_end failed: %s", esp_err_to_name(err));
+		printf("\n");
 		
-		SendError(request, HTTPD_500, "internal error");
-		return;
-	}
-	
-	if ((err = esp_ota_set_boot_partition(update_partition)) != ESP_OK)
-	{
-		ESP_LOGE(TAG, "esp_ota_set_boot_partition failed: %s", esp_err_to_name(err));
-		
-		SendError(request, HTTPD_500, "internal error");
-		return;
-	}
-	
-	auto elapsed = static_cast<float>(pdTICKS_TO_MS(xTaskGetTickCount() - update_start_ticks)) / 1000;
-	
-	ESP_LOGI(TAG, "firmware update done successfully in %.2f s", elapsed);
-	
-	auto* object = cJSON_CreateObject();
-	cJSON_AddNumberToObject(object, "elapsed_time", elapsed);
-	SendJson(request, object);
-	cJSON_Delete(object);
-	
-	xTaskCreate(
-		[](void* ctx) -> void {
-			vTaskDelay(10);
-			httpd_stop(reinterpret_cast<HttpInterface*>(ctx)->m_httpd_handle);
+		if ((err = esp_ota_end(ota_handle)) != ESP_OK)
+		{
+			ESP_LOGE(TAG, "esp_ota_end failed: %s", esp_err_to_name(err));
 			
-			ESP_LOGI(TAG, "restarting...");
-			esp_restart();
-		},
-		"Suicide",
-		4096,
-		this,
-		5,
-		nullptr
-	);
+			SendError(request, HTTPD_500, "internal error");
+			return;
+		}
+		
+		if ((err = esp_ota_set_boot_partition(update_partition)) != ESP_OK)
+		{
+			ESP_LOGE(TAG, "esp_ota_set_boot_partition failed: %s", esp_err_to_name(err));
+			
+			SendError(request, HTTPD_500, "internal error");
+			return;
+		}
+		
+		auto elapsed = static_cast<float>(pdTICKS_TO_MS(xTaskGetTickCount() - update_start_ticks)) / 1000;
+		
+		ESP_LOGI(TAG, "firmware update done successfully in %.2f s", elapsed);
+		
+		auto* object = cJSON_CreateObject();
+		cJSON_AddNumberToObject(object, "elapsed_time", elapsed);
+		SendJson(request, object);
+		cJSON_Delete(object);
+		
+		xTaskCreate(
+			[](void* ctx) -> void {
+				vTaskDelay(10);
+				httpd_stop(reinterpret_cast<HttpInterface*>(ctx)->m_httpd_handle);
+				
+				ESP_LOGI(TAG, "restarting...");
+				esp_restart();
+			},
+			"Suicide",
+			4096,
+			this,
+			5,
+			nullptr
+		);
+	}
+	
+	else
+	{
+		SendError(request, "400", "OTA is disabled");
+	}
 }
-
-#else // CONFIG_ANUS_API_OTA_ENABLED
-
-void HttpInterface::firmwareHandler(httpd_req_t* request)
-{
-	SendError(request, "400", "OTA disabled");
-}
-
-#endif // CONFIG_ANUS_API_OTA_ENABLED
 
 //========================================
 
-void HttpInterface::propertiesHandler(httpd_req_t* request)
+void HttpInterface::infoHandler(httpd_req_t* request)
 {
-	SendJson(request, m_properties_json);
+	SendJson(request, m_info_json);
 }
 
 void HttpInterface::propertyHandler(httpd_req_t* request)
@@ -192,36 +202,44 @@ void HttpInterface::propertyHandler(httpd_req_t* request)
 	
 	auto* property = m_properties[name];
 	
-	if (request->method == HTTP_GET)
+	switch (request->method)
 	{
-		auto* object = cJSON_CreateObject();
-		property->serialize(object);
-		SendJson(request, object);
-		cJSON_Delete(object);
-	}
-	
-	else
-	{
-		auto* buffer = new char[request->content_len + 1];
-		httpd_req_recv(request, buffer, request->content_len + 1);
-		
-		auto* object = cJSON_Parse(buffer);
-		delete[] buffer;
-		
-		if (!object)
+		case HTTP_GET:
 		{
-			SendError(request, HTTPD_400, "invalid json");
-			return;
+			auto* object = cJSON_CreateObject();
+			property->serialize(object);
+			SendJson(request, object);
+			cJSON_Delete(object);
+			
+			break;
 		}
 		
-		bool success = property->deserialize(object);
-		cJSON_Delete(object);
+		case HTTP_POST:
+		{
+			auto* buffer = new char[request->content_len + 1];
+			httpd_req_recv(request, buffer, request->content_len + 1);
+			
+			auto* object = cJSON_Parse(buffer);
+			delete[] buffer;
+			
+			if (!object)
+			{
+				SendError(request, HTTPD_400, "invalid json");
+				return;
+			}
+			
+			bool success = property->deserialize(object);
+			cJSON_Delete(object);
+			
+			if (!success)
+				SendError(request, HTTPD_400, "invalid property value");
+			
+			break;
+		}
 		
-		if (!success)
-			SendError(request, HTTPD_400, "invalid property value");
 	}
 	
-	httpd_resp_send(request, nullptr, 0);
+	httpd_resp_sendstr(request, "{}");
 }
 
 //========================================

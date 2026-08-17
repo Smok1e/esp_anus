@@ -39,7 +39,7 @@ menu "Application Network Unification Service (ANUS)"
     menu "Discovery server"
         config ANUS_DISCOVERY_PORT
             int "Discovery server port"
-            default 228
+            default 1488
 
         config ANUS_DISCOVERY_GROUP
             string "Discovery server multicast group"

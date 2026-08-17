@@ -38,13 +38,15 @@ private:
 	
 	httpd_handle_t m_httpd_handle = 0;
 	
+	cJSON* m_info_json = nullptr;
 	cJSON* m_properties_json = nullptr;
+	
 	std::map<std::string_view, property::Property*> m_properties {};
 	
 	template<auto Handler, httpd_method_t Method = HTTP_GET>
 	void registerUri(const char* uri);
 	
-	void propertiesHandler(httpd_req_t* request);
+	void infoHandler(httpd_req_t* request);
 	void propertyHandler(httpd_req_t* request);
 	void firmwareHandler(httpd_req_t* request);
 	

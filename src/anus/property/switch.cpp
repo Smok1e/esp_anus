@@ -7,8 +7,12 @@ namespace anus::property
 
 //========================================
 
-Switch::Switch(const char* name, bool value /*= false*/):
-	Property(name),
+Switch::Switch(
+	const char* name,
+	const char* description,
+	bool value /*= false*/
+):
+	Property(name, description),
 	m_value(value)
 {}
 

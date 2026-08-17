@@ -14,7 +14,11 @@ namespace anus::property
 class Switch: public Property
 {
 public:
-	Switch(const char* name, bool state = false);
+	Switch(
+		const char* name,
+		const char* description,
+		bool state = false
+	);
 	
 	bool getValue() const;
 	void setValue(bool value);

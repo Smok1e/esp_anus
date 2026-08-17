@@ -16,6 +16,7 @@ class Slider: public Property
 public:
 	Slider(
 		const char* name,
+		const char* description,
 		float value = 0.f,
 		float min = 0.f,
 		float max = 1.f

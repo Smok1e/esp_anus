@@ -19,10 +19,11 @@ namespace anus::property
 class Property
 {
 public:
-	Property(const char* name);
+	Property(const char* name, const char* description);
 	virtual ~Property();
 	
 	const char* getName() const;
+	const char* getDescription() const;
 	
 	virtual void onValueUpdated(std::function<void(Property*)> callback);
 	
@@ -33,6 +34,7 @@ public:
 protected:
 	std::function<void(Property*)> m_callback;
 	const char* m_name;
+	const char* m_description;
 	
 	void updateValue();
 	
