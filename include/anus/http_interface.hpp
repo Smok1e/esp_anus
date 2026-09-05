@@ -46,6 +46,7 @@ private:
 	template<auto Handler, httpd_method_t Method = HTTP_GET>
 	void registerUri(const char* uri);
 	
+	void preflightHandler(httpd_req_t* request);
 	void infoHandler(httpd_req_t* request);
 	void propertyHandler(httpd_req_t* request);
 	void firmwareHandler(httpd_req_t* request);
@@ -68,6 +69,7 @@ void HttpInterface::registerUri(const char* uri)
 		httpd_resp_set_hdr(request, "Access-Control-Allow-Origin", "*");
 		httpd_resp_set_hdr(request, "Access-Control-Allow-Methods", "GET, POST, OPTIONS");
 		httpd_resp_set_hdr(request, "Access-Control-Allow-Headers", "Auth, Content-Type, Authentication");
+		httpd_resp_set_hdr(request, "Access-Control-Max-Age", "600");
 #endif
 		
 		(reinterpret_cast<HttpInterface*>(request->user_ctx)->*Handler)(request);

@@ -31,7 +31,7 @@ float Slider::getValue() const
 
 void Slider::setValue(float value)
 {
-	m_value = value;
+	m_value = std::clamp<float>(value, m_min, m_max);
 }
 
 //========================================

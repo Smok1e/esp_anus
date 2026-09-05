@@ -31,12 +31,12 @@ public:
 	virtual void serialize(cJSON* object) = 0;
 	virtual bool deserialize(cJSON* object) = 0;
 	
+	void updateValue();
+	
 protected:
 	std::function<void(Property*)> m_callback;
 	const char* m_name;
 	const char* m_description;
-	
-	void updateValue();
 	
 };
 
