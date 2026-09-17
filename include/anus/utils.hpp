@@ -1,5 +1,7 @@
 #pragma once
 
+#include <stdio.h>
+
 // ANUS - Application Network Unification Service
 
 //========================================
@@ -22,6 +24,7 @@ namespace anus
 //========================================
 
 int NetCheck(int retval, const char* expr);
+void DumpHex(FILE* stream, const void* data, size_t len);
 
 //========================================
 
